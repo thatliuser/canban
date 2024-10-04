@@ -1,0 +1,8 @@
+[package]
+name = "canban"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+dotenvy = "0.15.7"
+reqwest = "0.12.8"
