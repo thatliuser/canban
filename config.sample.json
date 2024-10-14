@@ -1,5 +1,8 @@
 {
-    "canvas_token": "put in your canvas api token here",
+    "canvas": {
+        "token": "put in your canvas api token here",
+        "base_url": "the base url of your school's canvas instance. for me it is canvas.eee.uci.edu. don't include the protocol!"
+    },
     "notion": {
         "token": "put in your notion api token here, and make sure to have a database set up",
         "database": {

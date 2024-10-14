@@ -36,10 +36,11 @@ pub struct Assignment {
 
 pub struct CanvasClient {
     client: Client,
+    base: String,
 }
 
 impl CanvasClient {
-    pub fn new(token: String) -> CanvasClient {
+    pub fn new(base: String, token: String) -> CanvasClient {
         let mut headers = HeaderMap::new();
         headers.insert(
             "Authorization",
@@ -47,13 +48,15 @@ impl CanvasClient {
         );
         CanvasClient {
             client: Client::builder().default_headers(headers).build().unwrap(),
+            base: base,
         }
     }
 
     pub fn courses(&self) -> Vec<Course> {
+        let url = format!("https://{}/api/v1/courses?page=1&per_page=100", self.base);
         let resp = self
             .client
-            .get("https://canvas.eee.uci.edu/api/v1/courses?page=1&per_page=100")
+            .get(url)
             .send()
             .expect("Couldn't fetch courses from API")
             .text()
@@ -63,8 +66,8 @@ impl CanvasClient {
 
     pub fn assignments(&self, course: &Course) -> Vec<Assignment> {
         let url = format!(
-            "https://canvas.eee.uci.edu/api/v1/courses/{}/assignments?include=submission",
-            course.id
+            "https://{}/api/v1/courses/{}/assignments?include=submission",
+            self.base, course.id
         );
         let resp = self
             .client
