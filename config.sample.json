@@ -1,0 +1,14 @@
+{
+    "canvas_token": "put in your canvas api token here",
+    "notion": {
+        "token": "put in your notion api token here, and make sure to have a database set up",
+        "database": {
+            "id": "this is the id of the database that you need to set up",
+            "alias": {
+                "id of the canvas course 1": "name of the course under the 'subject' property in the notion database",
+                "id of the canvas course 2": "name of the course under the 'subject' property in the notion database",
+                "id of the canvas course 3": "name of the course under the 'subject' property in the notion database",
+            }
+        }
+    }
+}
