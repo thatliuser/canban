@@ -50,7 +50,7 @@ impl CanvasClient {
         }
     }
 
-    pub fn courses(self: &Self) -> Vec<Course> {
+    pub fn courses(&self) -> Vec<Course> {
         let resp = self
             .client
             .get("https://canvas.eee.uci.edu/api/v1/courses?page=1&per_page=100")
@@ -61,7 +61,7 @@ impl CanvasClient {
         serde_json::from_str(resp.as_str()).expect("Couldn't parse course API response")
     }
 
-    pub fn assignments(self: &Self, course: &Course) -> Vec<Assignment> {
+    pub fn assignments(&self, course: &Course) -> Vec<Assignment> {
         let url = format!(
             "https://canvas.eee.uci.edu/api/v1/courses/{}/assignments?include=submission",
             course.id
