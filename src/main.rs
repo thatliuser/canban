@@ -43,19 +43,6 @@ fn main() {
     let notion = NotionClient::new(config.notion.token);
     let db = notion.database(config.notion.database.id);
 
-    let status = db
-        .properties
-        .values()
-        .find(|prop| matches!(&prop.inner, PropertyTypeInner::Status { options: _ }))
-        .expect("Couldn't find status property");
-    let subject = db
-        .properties
-        .values()
-        .find(|prop| matches!(&prop.inner, PropertyTypeInner::Select { options: _ }))
-        .expect("Couldn't find subject property");
-
-    println!("Status: {:?}, subject: {:?}", status, subject);
-
     let courses: Vec<canvas::Course> = canvas
         .courses()
         .into_iter()
