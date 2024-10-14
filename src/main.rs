@@ -2,7 +2,11 @@ mod canvas;
 mod notion;
 
 use canvas::CanvasClient;
-use notion::{Filter, FilterJoin, FilterMatch, NotionClient, PropertyTypeInner};
+use colored::Colorize;
+use notion::{
+    DateValue, Filter, FilterJoin, FilterMatch, NotionClient, Page, PropertyTypeInner,
+    PropertyValueInner, StatusSelectValue, TitleValue,
+};
 use std::collections::HashMap;
 
 #[derive(serde::Deserialize)]
@@ -52,6 +56,11 @@ fn main() {
         .collect();
 
     for course in courses {
+        println!(
+            "Iterating course {} (id {})",
+            course.name.green(),
+            course.id.to_string().yellow()
+        );
         let subject = config
             .notion
             .database
@@ -65,13 +74,50 @@ fn main() {
                 equals: subject.into(),
             },
         };
-        let pages = notion.query(&db, filter);
-        println!("{:?}", pages);
-        /*
-        println!("{:?} ---", course);
+        let mut pages: HashMap<u32, Page> = notion
+            .query(&db, filter)
+            .into_iter()
+            .filter_map(|page| {
+                let id = page.properties.get("id")?;
+                let PropertyValueInner::Number(id) = id.inner else {
+                    return None;
+                };
+                Some((id?, page))
+            })
+            .collect();
         for assignment in canvas.assignments(&course) {
-            println!("{:?}", assignment);
+            println!("> Assignment '{}':", assignment.name.blue());
+            let page = pages.remove(&assignment.id).unwrap_or_else(|| {
+                println!("{}", ">> No page found, creating new page".red());
+                notion.create_page(
+                    &db,
+                    HashMap::from([
+                        ("id", PropertyValueInner::Number(Some(assignment.id))),
+                        (
+                            "subject",
+                            PropertyValueInner::Select(StatusSelectValue::new(subject)),
+                        ),
+                    ]),
+                )
+            });
+            // Update the properties that don't exist
+            println!(">> Updating assignment name and due date");
+            notion.update_page(
+                &page,
+                HashMap::from([
+                    (
+                        "name",
+                        PropertyValueInner::Title(vec![TitleValue::new(assignment.name, None)]),
+                    ),
+                    (
+                        "due",
+                        PropertyValueInner::Date(assignment.due_at.map(|date| DateValue {
+                            start: date,
+                            end: None,
+                        })),
+                    ),
+                ]),
+            );
         }
-        */
     }
 }

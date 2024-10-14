@@ -1,8 +1,9 @@
 use chrono::{DateTime, NaiveDate, Utc};
 use reqwest::{blocking::Client, header::HeaderMap};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[derive(serde::Deserialize, Debug)]
+#[derive(Deserialize, Debug)]
 pub struct PropOption {
     pub id: String,
     pub name: String,
@@ -10,7 +11,7 @@ pub struct PropOption {
     pub description: Option<String>,
 }
 
-#[derive(serde::Deserialize, Debug)]
+#[derive(Deserialize, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum PropertyTypeInner {
     // Most of these are not properly implemented because I'm lazy
@@ -36,7 +37,7 @@ pub enum PropertyTypeInner {
     Url {},
 }
 
-#[derive(serde::Deserialize, Debug)]
+#[derive(Deserialize, Debug)]
 pub struct PropertyType {
     pub id: String,
     pub name: String,
@@ -44,32 +45,64 @@ pub struct PropertyType {
     pub inner: PropertyTypeInner,
 }
 
-#[derive(serde::Deserialize, Debug)]
+#[derive(Deserialize, Debug)]
 pub struct Database {
     pub id: String,
     pub properties: HashMap<String, PropertyType>,
 }
 
-#[derive(serde::Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct DateValue {
-    start: DateTime<Utc>,
-    end: Option<DateTime<Utc>>,
+    pub start: DateTime<Utc>,
+    pub end: Option<DateTime<Utc>>,
 }
 
-#[derive(serde::Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
+pub struct TextValue {
+    pub content: String,
+    pub link: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 pub struct TitleValue {
-    plain_text: String,
+    pub text: TextValue,
+    #[serde(skip_serializing)]
+    pub plain_text: String,
+}
+
+impl TitleValue {
+    pub fn new(text: impl Into<String>, link: Option<String>) -> TitleValue {
+        TitleValue {
+            text: TextValue {
+                content: text.into(),
+                link: link,
+            },
+            plain_text: String::new(),
+        }
+    }
 }
 
 // Both have the same attributes
-#[derive(serde::Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct StatusSelectValue {
-    id: String,
-    name: String,
-    color: String,
+    #[serde(skip_serializing)]
+    pub id: String,
+    pub name: String,
+    #[serde(skip_serializing)]
+    pub color: String,
 }
 
-#[derive(serde::Deserialize, Debug)]
+impl StatusSelectValue {
+    pub fn new(name: impl Into<String>) -> StatusSelectValue {
+        StatusSelectValue {
+            id: String::new(),
+            name: name.into(),
+            color: String::new(),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum PropertyValueInner {
     // Most of these are not properly implemented because I'm lazy
@@ -83,7 +116,7 @@ pub enum PropertyValueInner {
     LastEditedBy {},
     LastEditedTime {},
     MultiSelect {},
-    Number {},
+    Number(Option<u32>),
     People {},
     PhoneNumber {},
     Relation {},
@@ -95,7 +128,7 @@ pub enum PropertyValueInner {
     Url {},
 }
 
-#[derive(serde::Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct PropertyValue {
     pub id: String,
     #[serde(rename = "type")]
@@ -104,7 +137,7 @@ pub struct PropertyValue {
     pub inner: PropertyValueInner,
 }
 
-#[derive(serde::Deserialize, Debug)]
+#[derive(Deserialize, Debug)]
 pub struct Page {
     pub id: String,
     pub properties: HashMap<String, PropertyValue>,
@@ -114,7 +147,7 @@ pub struct NotionClient {
     client: Client,
 }
 
-#[derive(serde::Serialize, Debug)]
+#[derive(Serialize, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum FilterMatch {
     // Most of these are not properly implemented because I'm lazy
@@ -135,14 +168,14 @@ pub enum FilterMatch {
     Title { equals: String },
 }
 
-#[derive(serde::Serialize, Debug)]
+#[derive(Serialize, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum FilterJoin {
     And(Vec<Filter>),
     Or(Vec<Filter>),
 }
 
-#[derive(serde::Serialize, Debug)]
+#[derive(Serialize, Debug)]
 #[serde(untagged)]
 pub enum Filter {
     Join(FilterJoin),
@@ -186,8 +219,8 @@ impl NotionClient {
         let filter = serde_json::json!({
             "filter": filter
         });
-        let string = serde_json::to_string(&filter).unwrap();
-        #[derive(serde::Deserialize, Debug)]
+        let body = serde_json::to_string(&filter).unwrap();
+        #[derive(Deserialize, Debug)]
         struct QueryResponse {
             results: Vec<Page>,
             next_cursor: Option<String>,
@@ -198,7 +231,7 @@ impl NotionClient {
         let resp = self
             .client
             .post(url)
-            .body(string)
+            .body(body)
             .send()
             .expect("Couldn't query database from API")
             .text()
@@ -212,6 +245,46 @@ impl NotionClient {
         }
 
         obj.results
+    }
+
+    pub fn create_page(
+        &self,
+        database: &Database,
+        properties: HashMap<&str, PropertyValueInner>,
+    ) -> Page {
+        let properties = serde_json::json!({
+            "parent": {
+                "database_id": database.id
+            },
+            "properties": properties
+        });
+        let body = serde_json::to_string(&properties).unwrap();
+        let resp = self
+            .client
+            .post("https://api.notion.com/v1/pages")
+            .body(body)
+            .send()
+            .expect("Couldn't create page")
+            .text()
+            .unwrap();
+        serde_json::from_str(resp.as_str()).unwrap()
+    }
+
+    pub fn update_page(&self, page: &Page, properties: HashMap<&str, PropertyValueInner>) -> Page {
+        let properties = serde_json::json!({
+            "properties": properties
+        });
+        let url = format!("https://api.notion.com/v1/pages/{}", page.id);
+        let body = serde_json::to_string(&properties).unwrap();
+        let resp = self
+            .client
+            .patch(url)
+            .body(body)
+            .send()
+            .expect("Couldn't update page")
+            .text()
+            .unwrap();
+        serde_json::from_str(resp.as_str()).unwrap()
     }
 }
 
@@ -242,7 +315,7 @@ mod tests {
     }
 
     #[test]
-    fn query_resp_fake_deser() {
+    fn query_resp_deser() {
         let str = r#"
             [{
                 "object": "page",
@@ -261,5 +334,69 @@ mod tests {
             }]"#;
         let pages: Vec<Page> = serde_json::from_str(str).unwrap();
         println!("{:?}", pages);
+    }
+
+    #[test]
+    fn property_ser() {
+        let props = HashMap::from([
+            (
+                "name",
+                PropertyValueInner::Title(vec![TitleValue::new("testing lsdkfjdslkf", None)]),
+            ),
+            (
+                "subject",
+                PropertyValueInner::Select(StatusSelectValue::new("subject 2")),
+            ),
+        ]);
+        let str = serde_json::to_string_pretty(&serde_json::json!({
+            "properties": props
+        }))
+        .unwrap();
+        println!("{}", str);
+    }
+
+    #[test]
+    fn create_page_json() {
+        let db = Database {
+            id: "fake database id".into(),
+            properties: HashMap::new(),
+        };
+        let properties = HashMap::from([
+            ("id", PropertyValueInner::Number(Some(3333))),
+            (
+                "subject",
+                PropertyValueInner::Select(StatusSelectValue::new("subject 2")),
+            ),
+        ]);
+        let properties = serde_json::json!({
+            "parent": {
+                "database_id": db.id
+            },
+            "properties": properties
+        });
+        let str = serde_json::to_string_pretty(&properties).unwrap();
+        println!("{}", str);
+    }
+
+    #[test]
+    fn update_page_json() {
+        let properties = HashMap::from([
+            (
+                "name",
+                PropertyValueInner::Title(vec![TitleValue::new("test title", None)]),
+            ),
+            (
+                "due",
+                PropertyValueInner::Date(Some(DateValue {
+                    start: chrono::Local::now().to_utc(),
+                    end: None,
+                })),
+            ),
+        ]);
+        let properties = serde_json::json!({
+            "properties": properties
+        });
+        let str = serde_json::to_string_pretty(&properties).unwrap();
+        println!("{}", str);
     }
 }
