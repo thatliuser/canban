@@ -222,7 +222,6 @@ impl NotionClient {
             .with_context(|| format!("Couldn't convert response from path {}", path))?;
         serde_json::from_str(&resp)
             .with_context(|| format!("Couldn't parse API response from path {}", path))
-            .map_err(|e| e.into())
     }
 
     fn with_body(
