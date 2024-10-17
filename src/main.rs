@@ -81,10 +81,23 @@ fn main() -> Result<()> {
     let notion = NotionClient::new(config.notion.token);
     let db = notion.database(config.notion.database.id)?;
 
-    let courses: Vec<canvas::Course> = canvas
-        .courses()?
-        .into_iter()
-        .filter(|course| config.notion.database.alias.contains_key(&course.id))
+    let courses: Vec<_> = config
+        .notion
+        .database
+        .alias
+        .keys()
+        .filter_map(|id| match canvas.course(*id) {
+            Err(err) => {
+                println!(
+                    "{}: {} ({})",
+                    id,
+                    "Skipping because of error fetching course".red(),
+                    err
+                );
+                None
+            }
+            Ok(course) => Some(course),
+        })
         .collect();
 
     for course in courses {

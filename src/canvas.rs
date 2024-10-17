@@ -77,13 +77,16 @@ impl CanvasClient {
             .with_context(|| format!("Couldn't parse API response from path {}", path))
     }
 
-    pub fn courses(&self) -> Result<Vec<Course>> {
-        self.send("courses?page=1&per_page=100", Client::get)
+    pub fn course(&self, id: u32) -> Result<Course> {
+        self.send(format!("courses/{}", id), Client::get)
     }
 
     pub fn assignments(&self, course: &Course) -> Result<Vec<Assignment>> {
         self.send(
-            format!("courses/{}/assignments?include=submission", course.id),
+            format!(
+                "courses/{}/assignments?include=submission&per_page=100",
+                course.id
+            ),
             Client::get,
         )
     }
