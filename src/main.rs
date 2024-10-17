@@ -132,6 +132,10 @@ fn main() -> Result<()> {
             .collect();
         for assignment in canvas.assignments(&course)? {
             println!("> Assignment '{}':", assignment.name.magenta());
+            let Some(due) = assignment.due_at else {
+                println!("{}", ">> Assignment has no due date, skipping".yellow());
+                continue;
+            };
             let page = pages.remove(&assignment.id).map_or_else(
                 || {
                     println!("{}", ">> No page found, creating new page".red());
@@ -163,8 +167,8 @@ fn main() -> Result<()> {
                     ),
                     (
                         "due",
-                        PropertyValueInner::Date(assignment.due_at.map(|date| DateValue {
-                            start: date.into(),
+                        PropertyValueInner::Date(Some(DateValue {
+                            start: due.into(),
                             end: None,
                         })),
                     ),
