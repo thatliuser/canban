@@ -1,7 +1,8 @@
 mod canvas;
 mod notion;
 
-use canvas::CanvasClient;
+use canvas::{Assignment, CanvasClient};
+use chrono::{DateTime, DurationRound, Local, TimeDelta};
 use colored::Colorize;
 use notion::{
     DateValue, Filter, FilterJoin, FilterMatch, NotionClient, Page, PropertyTypeInner,
@@ -35,6 +36,41 @@ struct Config {
     notion: NotionConfig,
 }
 
+fn needs_name_update(page: &Page, assignment: &Assignment) -> bool {
+    page.properties
+        .get("name")
+        .and_then(|name| match &name.inner {
+            PropertyValueInner::Title(value) => value.get(0),
+            _ => None,
+        })
+        .map(|name| &name.text.content)
+        != Some(&assignment.name)
+}
+
+fn needs_due_update(page: &Page, assignment: &Assignment) -> bool {
+    // Clone the date and convert the timezone
+    let due: Option<DateTime<Local>> = assignment.due_at.map(|due| {
+        // Truncate the duration because Notion pages don't accept seconds
+        due.clone()
+            .duration_trunc(TimeDelta::minutes(1))
+            .unwrap()
+            .into()
+    });
+    page.properties
+        .get("due")
+        .cloned()
+        .and_then(|due| match due.inner {
+            PropertyValueInner::Date(date) => date,
+            _ => None,
+        })
+        .map(|page| page.start)
+        != due
+}
+
+fn needs_update(page: &Page, assignment: &Assignment) -> bool {
+    needs_due_update(page, assignment) || needs_name_update(page, assignment)
+}
+
 fn main() {
     let config = std::fs::read_to_string("config.json").expect("Couldn't read config file");
     let config: Config = serde_json::from_str(config.as_str()).expect("Couldn't parse config file");
@@ -52,8 +88,8 @@ fn main() {
     for course in courses {
         println!(
             "Iterating course {} (id {})",
-            course.name.green(),
-            course.id.to_string().yellow()
+            course.name.blue(),
+            course.id.to_string().cyan()
         );
         let subject = config
             .notion
@@ -80,7 +116,7 @@ fn main() {
             })
             .collect();
         for assignment in canvas.assignments(&course) {
-            println!("> Assignment '{}':", assignment.name.blue());
+            println!("> Assignment '{}':", assignment.name.magenta());
             let page = pages.remove(&assignment.id).unwrap_or_else(|| {
                 println!("{}", ">> No page found, creating new page".red());
                 notion.create_page(
@@ -94,8 +130,12 @@ fn main() {
                     ]),
                 )
             });
+            if !needs_update(&page, &assignment) {
+                println!("{}", ">> Assignment up to date, skipping".green());
+                continue;
+            }
             // Update the properties that don't exist
-            println!(">> Updating assignment name and due date");
+            println!("{}", ">> Updating assignment name and due date".yellow());
             notion.update_page(
                 &page,
                 HashMap::from([

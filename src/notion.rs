@@ -51,19 +51,19 @@ pub struct Database {
     pub properties: HashMap<String, PropertyType>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DateValue {
     pub start: DateTime<Local>,
     pub end: Option<DateTime<Local>>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TextValue {
     pub content: String,
     pub link: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TitleValue {
     pub text: TextValue,
     #[serde(skip_serializing)]
@@ -83,7 +83,7 @@ impl TitleValue {
 }
 
 // Both have the same attributes
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct StatusSelectValue {
     #[serde(skip_serializing)]
     pub id: String,
@@ -102,7 +102,7 @@ impl StatusSelectValue {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "snake_case")]
 pub enum PropertyValueInner {
     // Most of these are not properly implemented because I'm lazy
@@ -128,7 +128,7 @@ pub enum PropertyValueInner {
     Url {},
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PropertyValue {
     pub id: String,
     #[serde(rename = "type")]
