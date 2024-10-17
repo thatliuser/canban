@@ -1,4 +1,4 @@
-use chrono::{DateTime, NaiveDate, Utc};
+use chrono::{DateTime, Local, NaiveDate, Utc};
 use reqwest::{blocking::Client, header::HeaderMap};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -53,8 +53,8 @@ pub struct Database {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct DateValue {
-    pub start: DateTime<Utc>,
-    pub end: Option<DateTime<Utc>>,
+    pub start: DateTime<Local>,
+    pub end: Option<DateTime<Local>>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

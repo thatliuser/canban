@@ -106,7 +106,7 @@ fn main() {
                     (
                         "due",
                         PropertyValueInner::Date(assignment.due_at.map(|date| DateValue {
-                            start: date,
+                            start: date.into(),
                             end: None,
                         })),
                     ),
