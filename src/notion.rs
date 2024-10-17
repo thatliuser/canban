@@ -1,6 +1,11 @@
-use chrono::{DateTime, Local, NaiveDate, Utc};
-use reqwest::{blocking::Client, header::HeaderMap};
-use serde::{Deserialize, Serialize};
+use anyhow::{Context, Result};
+use chrono::{DateTime, Local, NaiveDate};
+use reqwest::{
+    blocking::{Client, RequestBuilder},
+    header::HeaderMap,
+    IntoUrl, Url,
+};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::collections::HashMap;
 
 #[derive(Deserialize, Debug)]
@@ -200,22 +205,39 @@ impl NotionClient {
         }
     }
 
-    pub fn database(&self, id: String) -> Database {
-        let url = format!("https://api.notion.com/v1/databases/{}", id);
-        let resp = self
-            .client
-            .get(url)
+    fn send<T: DeserializeOwned>(
+        &self,
+        path: impl Into<String>,
+        method: Box<dyn Fn(&Client, Url) -> RequestBuilder>,
+    ) -> Result<T> {
+        let path: String = path.into();
+        let url = Url::parse(&format!("https://api.notion.com/v1/{}", path))
+            .with_context(|| format!("Couldn't parse URL with path {}", path))?;
+        let resp = method(&self.client, url)
             .send()
-            .expect("Couldn't fetch database from API")
+            .with_context(|| format!("Couldn't make request to path {}", path))?
+            .error_for_status()
+            .with_context(|| format!("Non-200 status returned from path {}", path))?
             .text()
-            .unwrap();
-        // println!("{}", resp);
-        serde_json::from_str(resp.as_str()).expect("Couldn't parse database API response")
+            .with_context(|| format!("Couldn't convert response from path {}", path))?;
+        serde_json::from_str(&resp)
+            .with_context(|| format!("Couldn't parse API response from path {}", path))
+            .map_err(|e| e.into())
+    }
+
+    fn with_body(
+        method: fn(&Client, Url) -> RequestBuilder,
+        body: String,
+    ) -> Box<dyn Fn(&Client, Url) -> RequestBuilder> {
+        Box::new(move |client, url| method(client, url).body(body.clone()))
+    }
+
+    pub fn database(&self, id: String) -> Result<Database> {
+        self.send(format!("databases/{}", id), Box::new(Client::get))
     }
 
     // TODO: Support filters
-    pub fn query(&self, database: &Database, filter: Filter) -> Vec<Page> {
-        let url = format!("https://api.notion.com/v1/databases/{}/query", database.id);
+    pub fn query(&self, database: &Database, filter: Filter) -> Result<Vec<Page>> {
         let filter = serde_json::json!({
             "filter": filter
         });
@@ -228,30 +250,23 @@ impl NotionClient {
             // There's more properties but I am LAZY
         }
 
-        let resp = self
-            .client
-            .post(url)
-            .body(body)
-            .send()
-            .expect("Couldn't query database from API")
-            .text()
-            .unwrap();
+        let resp: QueryResponse = self.send(
+            format!("databases/{}/query", database.id),
+            Self::with_body(Client::post, body),
+        )?;
 
-        let obj: QueryResponse = serde_json::from_str(resp.as_str())
-            .expect("Couldn't parse database query API response");
-
-        if obj.has_more {
+        if resp.has_more {
             println!("WARNING: There are more query results that I am too lazy to fetch");
         }
 
-        obj.results
+        Ok(resp.results)
     }
 
     pub fn create_page(
         &self,
         database: &Database,
         properties: HashMap<&str, PropertyValueInner>,
-    ) -> Page {
+    ) -> Result<Page> {
         let properties = serde_json::json!({
             "parent": {
                 "database_id": database.id
@@ -259,32 +274,24 @@ impl NotionClient {
             "properties": properties
         });
         let body = serde_json::to_string(&properties).unwrap();
-        let resp = self
-            .client
-            .post("https://api.notion.com/v1/pages")
-            .body(body)
-            .send()
-            .expect("Couldn't create page")
-            .text()
-            .unwrap();
-        serde_json::from_str(resp.as_str()).unwrap()
+
+        self.send("pages", Self::with_body(Client::post, body))
     }
 
-    pub fn update_page(&self, page: &Page, properties: HashMap<&str, PropertyValueInner>) -> Page {
+    pub fn update_page(
+        &self,
+        page: &Page,
+        properties: HashMap<&str, PropertyValueInner>,
+    ) -> Result<Page> {
         let properties = serde_json::json!({
             "properties": properties
         });
-        let url = format!("https://api.notion.com/v1/pages/{}", page.id);
         let body = serde_json::to_string(&properties).unwrap();
-        let resp = self
-            .client
-            .patch(url)
-            .body(body)
-            .send()
-            .expect("Couldn't update page")
-            .text()
-            .unwrap();
-        serde_json::from_str(resp.as_str()).unwrap()
+
+        self.send(
+            format!("pages/{}", page.id),
+            Self::with_body(Client::patch, body),
+        )
     }
 }
 
@@ -388,7 +395,7 @@ mod tests {
             (
                 "due",
                 PropertyValueInner::Date(Some(DateValue {
-                    start: chrono::Local::now().to_utc(),
+                    start: chrono::Local::now(),
                     end: None,
                 })),
             ),

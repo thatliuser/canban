@@ -1,12 +1,13 @@
 mod canvas;
 mod notion;
 
+use anyhow::{Context, Result};
 use canvas::{Assignment, CanvasClient};
 use chrono::{DateTime, DurationRound, Local, TimeDelta};
 use colored::Colorize;
 use notion::{
-    DateValue, Filter, FilterJoin, FilterMatch, NotionClient, Page, PropertyTypeInner,
-    PropertyValueInner, StatusSelectValue, TitleValue,
+    DateValue, Filter, FilterMatch, NotionClient, Page, PropertyValueInner, StatusSelectValue,
+    TitleValue,
 };
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -71,13 +72,14 @@ fn needs_update(page: &Page, assignment: &Assignment) -> bool {
     needs_due_update(page, assignment) || needs_name_update(page, assignment)
 }
 
-fn main() {
-    let config = std::fs::read_to_string("config.json").expect("Couldn't read config file");
-    let config: Config = serde_json::from_str(config.as_str()).expect("Couldn't parse config file");
+fn main() -> Result<()> {
+    let config = std::fs::read_to_string("config.json").context("Couldn't read config file")?;
+    let config: Config =
+        serde_json::from_str(config.as_str()).context("Couldn't parse config file")?;
 
     let canvas = CanvasClient::new(config.canvas.base_url, config.canvas.token);
     let notion = NotionClient::new(config.notion.token);
-    let db = notion.database(config.notion.database.id);
+    let db = notion.database(config.notion.database.id)?;
 
     let courses: Vec<canvas::Course> = canvas
         .courses()
@@ -105,7 +107,7 @@ fn main() {
             },
         };
         let mut pages: HashMap<u32, Page> = notion
-            .query(&db, filter)
+            .query(&db, filter)?
             .into_iter()
             .filter_map(|page| {
                 let id = page.properties.get("id")?;
@@ -117,19 +119,22 @@ fn main() {
             .collect();
         for assignment in canvas.assignments(&course) {
             println!("> Assignment '{}':", assignment.name.magenta());
-            let page = pages.remove(&assignment.id).unwrap_or_else(|| {
-                println!("{}", ">> No page found, creating new page".red());
-                notion.create_page(
-                    &db,
-                    HashMap::from([
-                        ("id", PropertyValueInner::Number(Some(assignment.id))),
-                        (
-                            "subject",
-                            PropertyValueInner::Select(StatusSelectValue::new(subject)),
-                        ),
-                    ]),
-                )
-            });
+            let page = pages.remove(&assignment.id).map_or_else(
+                || {
+                    println!("{}", ">> No page found, creating new page".red());
+                    notion.create_page(
+                        &db,
+                        HashMap::from([
+                            ("id", PropertyValueInner::Number(Some(assignment.id))),
+                            (
+                                "subject",
+                                PropertyValueInner::Select(StatusSelectValue::new(subject)),
+                            ),
+                        ]),
+                    )
+                },
+                Ok,
+            )?;
             if !needs_update(&page, &assignment) {
                 println!("{}", ">> Assignment up to date, skipping".green());
                 continue;
@@ -151,7 +156,9 @@ fn main() {
                         })),
                     ),
                 ]),
-            );
+            )?;
         }
     }
+
+    Ok(())
 }

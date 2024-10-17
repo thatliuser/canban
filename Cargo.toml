@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+anyhow = "1.0.89"
 chrono = { version = "0.4.38", features = ["clock", "serde"] }
 colored = "2.1.0"
 reqwest = { version = "0.12.8", features = ["blocking"] }
