@@ -82,7 +82,7 @@ fn main() -> Result<()> {
     let db = notion.database(config.notion.database.id)?;
 
     let courses: Vec<canvas::Course> = canvas
-        .courses()
+        .courses()?
         .into_iter()
         .filter(|course| config.notion.database.alias.contains_key(&course.id))
         .collect();
@@ -117,7 +117,7 @@ fn main() -> Result<()> {
                 Some((id?, page))
             })
             .collect();
-        for assignment in canvas.assignments(&course) {
+        for assignment in canvas.assignments(&course)? {
             println!("> Assignment '{}':", assignment.name.magenta());
             let page = pages.remove(&assignment.id).map_or_else(
                 || {

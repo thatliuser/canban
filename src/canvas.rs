@@ -1,7 +1,13 @@
+use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
-use reqwest::{blocking::Client, header::HeaderMap};
+use reqwest::{
+    blocking::{Client, RequestBuilder},
+    header::HeaderMap,
+    Url,
+};
+use serde::{de::DeserializeOwned, Deserialize};
 
-#[derive(serde::Deserialize, Debug)]
+#[derive(Deserialize, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum WorkflowState {
     Submitted,
@@ -10,7 +16,7 @@ pub enum WorkflowState {
     PendingReview,
 }
 
-#[derive(serde::Deserialize, Debug)]
+#[derive(Deserialize, Debug)]
 pub struct Course {
     pub id: u32,
     #[serde(default)]
@@ -19,13 +25,13 @@ pub struct Course {
     pub enrollment_term_id: u32,
 }
 
-#[derive(serde::Deserialize, Debug)]
+#[derive(Deserialize, Debug)]
 pub struct Submission {
     pub id: u32,
     pub workflow_state: WorkflowState,
 }
 
-#[derive(serde::Deserialize, Debug)]
+#[derive(Deserialize, Debug)]
 pub struct Assignment {
     pub id: u32,
     pub name: String,
@@ -52,31 +58,34 @@ impl CanvasClient {
         }
     }
 
-    pub fn courses(&self) -> Vec<Course> {
-        let url = format!("https://{}/api/v1/courses?page=1&per_page=100", self.base);
-        let resp = self
-            .client
-            .get(url)
+    fn send<T: DeserializeOwned>(
+        &self,
+        path: impl Into<String>,
+        method: fn(&Client, Url) -> RequestBuilder,
+    ) -> Result<T> {
+        let path: String = path.into();
+        let url = Url::parse(&format!("https://{}/api/v1/{}", self.base, path))
+            .with_context(|| format!("Couldn't parse URL with path {}", path))?;
+        let resp = method(&self.client, url)
             .send()
-            .expect("Couldn't fetch courses from API")
+            .with_context(|| format!("Couldn't make request to path {}", path))?
+            .error_for_status()
+            .with_context(|| format!("Non-200 status returned from path {}", path))?
             .text()
-            .unwrap();
-        serde_json::from_str(resp.as_str()).expect("Couldn't parse course API response")
+            .with_context(|| format!("Couldn't convert response from path {}", path))?;
+        serde_json::from_str(&resp)
+            .with_context(|| format!("Couldn't parse API response from path {}", path))
+            .map_err(|e| e.into())
     }
 
-    pub fn assignments(&self, course: &Course) -> Vec<Assignment> {
-        let url = format!(
-            "https://{}/api/v1/courses/{}/assignments?include=submission",
-            self.base, course.id
-        );
-        let resp = self
-            .client
-            .get(url)
-            .send()
-            .expect("Couldn't fetch assignments from API")
-            .text()
-            .unwrap();
+    pub fn courses(&self) -> Result<Vec<Course>> {
+        self.send("courses?page=1&per_page=100", Client::get)
+    }
 
-        serde_json::from_str(resp.as_str()).expect("Couldn't parse assignment API response")
+    pub fn assignments(&self, course: &Course) -> Result<Vec<Assignment>> {
+        self.send(
+            format!("courses/{}/assignments?include=submission", course.id),
+            Client::get,
+        )
     }
 }
