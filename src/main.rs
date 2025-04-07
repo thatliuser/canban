@@ -145,7 +145,7 @@ fn main() -> Result<()> {
                             ("id", PropertyValueInner::Number(Some(assignment.id))),
                             (
                                 "subject",
-                                PropertyValueInner::Select(StatusSelectValue::new(subject)),
+                                PropertyValueInner::Select(Some(StatusSelectValue::new(subject))),
                             ),
                         ]),
                     )

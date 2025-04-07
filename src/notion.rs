@@ -127,7 +127,7 @@ pub enum PropertyValueInner {
     Relation {},
     RichText {},
     Rollup {},
-    Select(StatusSelectValue),
+    Select(Option<StatusSelectValue>),
     Status(StatusSelectValue),
     Title(Vec<TitleValue>),
     Url {},
@@ -351,7 +351,7 @@ mod tests {
             ),
             (
                 "subject",
-                PropertyValueInner::Select(StatusSelectValue::new("subject 2")),
+                PropertyValueInner::Select(Some(StatusSelectValue::new("subject 2"))),
             ),
         ]);
         let str = serde_json::to_string_pretty(&serde_json::json!({
@@ -371,7 +371,7 @@ mod tests {
             ("id", PropertyValueInner::Number(Some(3333))),
             (
                 "subject",
-                PropertyValueInner::Select(StatusSelectValue::new("subject 2")),
+                PropertyValueInner::Select(Some(StatusSelectValue::new("subject 2"))),
             ),
         ]);
         let properties = serde_json::json!({
